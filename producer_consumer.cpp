@@ -3,6 +3,8 @@
 
 #include <string>
 #include <sstream>
+#include <unistd.h>
+#include <cstdlib>
 
 struct storage {
     int value;
@@ -12,6 +14,8 @@ struct storage {
     pthread_cond_t reading_finished;
     pthread_mutex_t mutex;
 };
+
+unsigned int sleep_limit;
 
 int get_tid() {
   // 1 to 3+N thread ID
@@ -47,10 +51,28 @@ void* producer_routine(void* arg) {
 }
 
 void* consumer_routine(void* arg) {
-  (void)arg;
+  storage* place = (storage*) arg;
   // for every update issued by producer, read the value and add to sum
   // return pointer to result (for particular consumer)
-  return nullptr;
+
+  int res = 0;
+  while (1) {
+    pthread_mutex_lock(&place->mutex);
+    if (place->finished) break;
+    while (!place->valid && !place->finished) {
+      pthread_cond_wait(&place->writing_finished, &place->mutex);
+    }
+    if (place->valid) {
+      res += place->value;
+      place->valid = false;
+      pthread_cond_signal(&place->reading_finished);
+    }
+    pthread_mutex_unlock(&place->mutex);
+    if (sleep_limit > 0) usleep(rand()%sleep_limit);
+  }
+
+  pthread_mutex_unlock(&place->mutex);
+  return (void*)res;
 }
 
 void* consumer_interruptor_routine(void* arg) {
@@ -59,11 +81,12 @@ void* consumer_interruptor_routine(void* arg) {
   return nullptr;
 }
 
-int run_threads(int cons_n, int max_sleep) {
+int run_threads(int cons_n, unsigned int max_sleep) {
   // start N threads and wait until they're done
   // return aggregated sum of values
   int i = 0;
   storage place = {NULL, false, false, NULL, NULL, NULL};
+  sleep_limit = max_sleep;
   
   pthread_mutex_init(&place.mutex, NULL);
   pthread_cond_init(&place.writing_finished, NULL);

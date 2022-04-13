@@ -1,19 +1,21 @@
+#include "producer_consumer.h"
+
 #include <pthread.h>
 #include <iostream>
 
-#include <string>
-#include <sstream>
 #include <unistd.h>
 #include <cstdlib>
 #include <experimental/iterator>
+#include <sstream>
+#include <string>
 
 struct storage {
-    int value;
-    bool valid;
-    bool finished;
-    pthread_cond_t writing_finished;
-    pthread_cond_t reading_finished;
-    pthread_mutex_t mutex;
+  int value;
+  bool valid;
+  bool finished;
+  pthread_cond_t writing_finished;
+  pthread_cond_t reading_finished;
+  pthread_mutex_t mutex;
 };
 
 unsigned int sleep_limit;
@@ -25,7 +27,7 @@ int get_tid() {
 }
 
 void* producer_routine(void* arg) {
-  storage* place = (storage*) arg;
+  storage* place = (storage*)arg;
   // read data, loop through each value and update the value, notify consumer,
   // wait for consumer to process
 
@@ -54,11 +56,11 @@ void* producer_routine(void* arg) {
 
 void* consumer_routine(void* arg) {
   pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-  storage* place = (storage*) arg;
+  storage* place = (storage*)arg;
   // for every update issued by producer, read the value and add to sum
   // return pointer to result (for particular consumer)
 
-  int res = 0;
+  size_t res = 0;
   while (1) {
     pthread_mutex_lock(&place->mutex);
     if (place->finished) break;
@@ -71,7 +73,7 @@ void* consumer_routine(void* arg) {
       pthread_cond_signal(&place->reading_finished);
     }
     pthread_mutex_unlock(&place->mutex);
-    if (sleep_limit > 0) usleep(rand()%sleep_limit);
+    if (sleep_limit > 0) usleep(rand() % sleep_limit);
   }
 
   pthread_mutex_unlock(&place->mutex);
@@ -79,12 +81,13 @@ void* consumer_routine(void* arg) {
 }
 
 void* consumer_interruptor_routine(void* arg) {
-  storage* place = (storage*) arg;
+  storage* place = (storage*)arg;
   // interrupt random consumer while producer is running
-  while(1) {
+  while (1) {
     pthread_mutex_lock(&place->mutex);
     if (place->finished) break;
-    pthread_cancel(consumers[rand()%(int(sizeof(consumers) / sizeof(consumers[0])))]);
+    pthread_cancel(
+        consumers[rand() % (int(sizeof(consumers) / sizeof(consumers[0])))]);
     pthread_mutex_unlock(&place->mutex);
   }
   pthread_mutex_unlock(&place->mutex);
@@ -95,32 +98,37 @@ int run_threads(int cons_n, unsigned int max_sleep) {
   // start N threads and wait until they're done
   // return aggregated sum of values
   int i = 0;
-  storage place = {NULL, false, false, NULL, NULL, NULL};
+  storage place;
+  place.finished = false;
+  place.valid = false;
   sleep_limit = max_sleep;
-  
+
   pthread_mutex_init(&place.mutex, NULL);
   pthread_cond_init(&place.writing_finished, NULL);
   pthread_cond_init(&place.reading_finished, NULL);
 
-	consumers = (pthread_t*) malloc(cons_n * sizeof(pthread_t));
+  consumers = (pthread_t*)malloc(cons_n * sizeof(pthread_t));
   pthread_t producer;
   pthread_t interruptor;
 
   pthread_create(&producer, NULL, producer_routine, &place);
-	for(i = 0; i < cons_n; i++) {
-		pthread_create(&consumers[i], NULL, consumer_routine, &place);
-	}
+  for (i = 0; i < cons_n; i++) {
+    pthread_create(&consumers[i], NULL, consumer_routine, &place);
+  }
   pthread_create(&interruptor, NULL, consumer_interruptor_routine, &place);
 
-  void** consumer_results = (void**) malloc(cons_n * sizeof(void*));
-  int res = 0;
+  void** consumer_results = (void**)malloc(cons_n * sizeof(void*));
+  size_t res = 0;
 
   pthread_join(producer, NULL);
-	for(i = 0; i < cons_n; i++) {
-		pthread_join(consumers[i], &consumer_results[i]);
-    res += (int) consumer_results[i];
-	}
+  for (i = 0; i < cons_n; i++) {
+    pthread_join(consumers[i], &consumer_results[i]);
+    res += (size_t)consumer_results[i];
+  }
   pthread_join(interruptor, NULL);
+
+  free(consumers);
+  free(consumer_results);
 
   return res;
 }

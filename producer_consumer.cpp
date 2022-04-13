@@ -75,7 +75,7 @@ void* consumer_routine(void* arg) {
   }
 
   pthread_mutex_unlock(&place->mutex);
-  return (void*)res;
+  pthread_exit((void*)res);
 }
 
 void* consumer_interruptor_routine(void* arg) {
@@ -112,11 +112,15 @@ int run_threads(int cons_n, unsigned int max_sleep) {
 	}
   pthread_create(&interruptor, NULL, consumer_interruptor_routine, &place);
 
+  void** consumer_results = (void**) malloc(cons_n * sizeof(void*));
+  int res = 0;
+
   pthread_join(producer, NULL);
 	for(i = 0; i < cons_n; i++) {
-		pthread_join(consumers[i], NULL);
+		pthread_join(consumers[i], &consumer_results[i]);
+    res += (int) consumer_results[i];
 	}
   pthread_join(interruptor, NULL);
 
-  return 0;
+  return res;
 }

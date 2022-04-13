@@ -5,6 +5,7 @@
 #include <sstream>
 #include <unistd.h>
 #include <cstdlib>
+#include <experimental/iterator>
 
 struct storage {
     int value;
@@ -16,6 +17,7 @@ struct storage {
 };
 
 unsigned int sleep_limit;
+pthread_t* consumers;
 
 int get_tid() {
   // 1 to 3+N thread ID
@@ -51,6 +53,7 @@ void* producer_routine(void* arg) {
 }
 
 void* consumer_routine(void* arg) {
+  pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
   storage* place = (storage*) arg;
   // for every update issued by producer, read the value and add to sum
   // return pointer to result (for particular consumer)
@@ -76,8 +79,15 @@ void* consumer_routine(void* arg) {
 }
 
 void* consumer_interruptor_routine(void* arg) {
-  (void)arg;
+  storage* place = (storage*) arg;
   // interrupt random consumer while producer is running
+  while(1) {
+    pthread_mutex_lock(&place->mutex);
+    if (place->finished) break;
+    pthread_cancel(consumers[rand()%(int(sizeof(consumers) / sizeof(consumers[0])))]);
+    pthread_mutex_unlock(&place->mutex);
+  }
+  pthread_mutex_unlock(&place->mutex);
   return nullptr;
 }
 
@@ -92,21 +102,21 @@ int run_threads(int cons_n, unsigned int max_sleep) {
   pthread_cond_init(&place.writing_finished, NULL);
   pthread_cond_init(&place.reading_finished, NULL);
 
-	pthread_t* consumers = (pthread_t*) malloc(cons_n * sizeof(pthread_t));
+	consumers = (pthread_t*) malloc(cons_n * sizeof(pthread_t));
   pthread_t producer;
   pthread_t interruptor;
 
   pthread_create(&producer, NULL, producer_routine, &place);
-  pthread_create(&interruptor, NULL, consumer_interruptor_routine, &place);
 	for(i = 0; i < cons_n; i++) {
 		pthread_create(&consumers[i], NULL, consumer_routine, &place);
 	}
+  pthread_create(&interruptor, NULL, consumer_interruptor_routine, &place);
 
   pthread_join(producer, NULL);
-  pthread_join(interruptor, NULL);
 	for(i = 0; i < cons_n; i++) {
 		pthread_join(consumers[i], NULL);
 	}
+  pthread_join(interruptor, NULL);
 
   return 0;
 }

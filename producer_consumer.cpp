@@ -113,9 +113,11 @@ void* consumer_interruptor_routine(void* arg) {
   return nullptr;
 }
 
-int run_threads(int cons_n, unsigned int max_sleep, bool debug, std::istream* input_stream) {
+int run_threads(int cons_n, unsigned int max_sleep, bool debug,
+                std::istream* input_stream) {
   // start N threads and wait until they're done
   // return aggregated sum of values
+  if (cons_n == 0) return 0;
   int i;
   sleep_limit = max_sleep;
   debug_flag = debug;

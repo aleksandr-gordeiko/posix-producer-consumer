@@ -18,17 +18,26 @@ struct storage {
   pthread_mutex_t mutex;
 };
 
+struct thread_data {
+  storage* storage_obj;
+  int* my_tid_ptr;
+};
+
 unsigned int sleep_limit;
 bool debug_flag;
 pthread_t* consumers;
 
+thread_local int* tid_ptr;
+
 int get_tid() {
   // 1 to 3+N thread ID
-  return 0;
+  return *tid_ptr;
 }
 
 void* producer_routine(void* arg) {
-  storage* place = (storage*)arg;
+  thread_data* data = (thread_data*)arg;
+  storage* place = data->storage_obj;
+  tid_ptr = data->my_tid_ptr;
   // read data, loop through each value and update the value, notify consumer,
   // wait for consumer to process
 
@@ -57,7 +66,9 @@ void* producer_routine(void* arg) {
 
 void* consumer_routine(void* arg) {
   pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
-  storage* place = (storage*)arg;
+  thread_data* data = (thread_data*)arg;
+  storage* place = data->storage_obj;
+  tid_ptr = data->my_tid_ptr;
   // for every update issued by producer, read the value and add to sum
   // return pointer to result (for particular consumer)
 
@@ -70,7 +81,7 @@ void* consumer_routine(void* arg) {
     }
     if (place->valid) {
       res += place->value;
-      std::cout << res << std::endl;
+      if (debug_flag) std::cout << get_tid() << ": " << res << std::endl;
       place->valid = false;
       pthread_cond_signal(&place->reading_finished);
     }
@@ -83,7 +94,9 @@ void* consumer_routine(void* arg) {
 }
 
 void* consumer_interruptor_routine(void* arg) {
-  storage* place = (storage*)arg;
+  thread_data* data = (thread_data*)arg;
+  storage* place = data->storage_obj;
+  tid_ptr = data->my_tid_ptr;
   // interrupt random consumer while producer is running
   while (1) {
     pthread_mutex_lock(&place->mutex);
@@ -99,12 +112,13 @@ void* consumer_interruptor_routine(void* arg) {
 int run_threads(int cons_n, unsigned int max_sleep, bool debug) {
   // start N threads and wait until they're done
   // return aggregated sum of values
-  int i = 0;
+  int i;
+  sleep_limit = max_sleep;
+  debug_flag = debug;
+
   storage place;
   place.finished = false;
   place.valid = false;
-  sleep_limit = max_sleep;
-  debug_flag = debug;
 
   pthread_mutex_init(&place.mutex, NULL);
   pthread_cond_init(&place.writing_finished, NULL);
@@ -114,11 +128,16 @@ int run_threads(int cons_n, unsigned int max_sleep, bool debug) {
   pthread_t producer;
   pthread_t interruptor;
 
-  pthread_create(&producer, NULL, producer_routine, &place);
-  for (i = 0; i < cons_n; i++) {
-    pthread_create(&consumers[i], NULL, consumer_routine, &place);
-  }
-  pthread_create(&interruptor, NULL, consumer_interruptor_routine, &place);
+  thread_data* data = (thread_data*)malloc((cons_n + 2) * sizeof(thread_data));
+  int* tids = (int*)malloc((cons_n + 2) * sizeof(int));
+  data[0] = {&place, tids};
+  for (i = 0; i < cons_n; i++) data[i + 2] = {&place, tids + i + 2};
+  data[1] = {&place, tids + 1};
+
+  pthread_create(&producer, NULL, producer_routine, &data[0]);
+  for (i = 0; i < cons_n; i++)
+    pthread_create(&consumers[i], NULL, consumer_routine, &data[i + 2]);
+  pthread_create(&interruptor, NULL, consumer_interruptor_routine, &data[1]);
 
   void** consumer_results = (void**)malloc(cons_n * sizeof(void*));
   size_t res = 0;
@@ -132,6 +151,8 @@ int run_threads(int cons_n, unsigned int max_sleep, bool debug) {
 
   free(consumers);
   free(consumer_results);
+  free(data);
+  free(tids);
 
   return res;
 }

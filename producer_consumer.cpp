@@ -19,6 +19,7 @@ struct storage {
 };
 
 unsigned int sleep_limit;
+bool debug_flag;
 pthread_t* consumers;
 
 int get_tid() {
@@ -69,6 +70,7 @@ void* consumer_routine(void* arg) {
     }
     if (place->valid) {
       res += place->value;
+      std::cout << res << std::endl;
       place->valid = false;
       pthread_cond_signal(&place->reading_finished);
     }
@@ -94,7 +96,7 @@ void* consumer_interruptor_routine(void* arg) {
   return nullptr;
 }
 
-int run_threads(int cons_n, unsigned int max_sleep) {
+int run_threads(int cons_n, unsigned int max_sleep, bool debug) {
   // start N threads and wait until they're done
   // return aggregated sum of values
   int i = 0;
@@ -102,6 +104,7 @@ int run_threads(int cons_n, unsigned int max_sleep) {
   place.finished = false;
   place.valid = false;
   sleep_limit = max_sleep;
+  debug_flag = debug;
 
   pthread_mutex_init(&place.mutex, NULL);
   pthread_cond_init(&place.writing_finished, NULL);

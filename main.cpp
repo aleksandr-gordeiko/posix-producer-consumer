@@ -10,6 +10,6 @@ int main(int argc, char** argv) {
   }
   int cons_n = std::atoi(argv[1]);
   int max_sleep = std::atoi(argv[2]);
-  std::cout << run_threads(cons_n, max_sleep, debug) << std::endl;
+  std::cout << run_threads(cons_n, max_sleep, debug, &std::cin) << std::endl;
   return 0;
 }

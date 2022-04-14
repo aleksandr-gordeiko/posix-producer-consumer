@@ -25,8 +25,9 @@ struct thread_data {
 
 unsigned int sleep_limit;
 bool debug_flag;
-pthread_t* consumers;
+std::istream* in_stream;
 
+pthread_t* consumers;
 thread_local int* tid_ptr;
 
 int get_tid() {
@@ -42,7 +43,7 @@ void* producer_routine(void* arg) {
   // wait for consumer to process
 
   std::string line, token;
-  std::getline(std::cin, line);
+  std::getline(*in_stream, line);
   std::stringstream S(line);
 
   while (S >> token) {
@@ -112,12 +113,13 @@ void* consumer_interruptor_routine(void* arg) {
   return nullptr;
 }
 
-int run_threads(int cons_n, unsigned int max_sleep, bool debug) {
+int run_threads(int cons_n, unsigned int max_sleep, bool debug, std::istream* input_stream) {
   // start N threads and wait until they're done
   // return aggregated sum of values
   int i;
   sleep_limit = max_sleep;
   debug_flag = debug;
+  in_stream = input_stream;
 
   storage place;
   place.finished = false;

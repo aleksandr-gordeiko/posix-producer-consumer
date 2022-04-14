@@ -57,6 +57,9 @@ void* producer_routine(void* arg) {
   }
 
   pthread_mutex_lock(&place->mutex);
+  while (place->valid) {
+    pthread_cond_wait(&place->reading_finished, &place->mutex);
+  }
   place->finished = true;
   pthread_cond_broadcast(&place->writing_finished);
   pthread_mutex_unlock(&place->mutex);
@@ -130,6 +133,8 @@ int run_threads(int cons_n, unsigned int max_sleep, bool debug) {
 
   thread_data* data = (thread_data*)malloc((cons_n + 2) * sizeof(thread_data));
   int* tids = (int*)malloc((cons_n + 2) * sizeof(int));
+  for (i = 0; i < cons_n + 2; i++) tids[i] = i + 2;
+
   data[0] = {&place, tids};
   for (i = 0; i < cons_n; i++) data[i + 2] = {&place, tids + i + 2};
   data[1] = {&place, tids + 1};
